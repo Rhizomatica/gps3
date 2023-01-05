@@ -6,10 +6,7 @@ from __future__ import print_function
 from threading import Thread
 from time import sleep
 
-try:  # This kludge to get around imports with files and directories the same name.
-    import gps3  # Python 3
-except ImportError:
-    from . import gps3  # Python 2
+from . import gps3
 
 __author__ = 'Moe'
 __copyright__ = 'Copyright 2016  Moe'
