@@ -18,8 +18,11 @@ Iterate         for new_data in gpsd_socket
 Use                     print('Lat/Lon = ',data_stream.lat,' ', data_stream.lon)
                         print('Altitude = ',data_stream.alt)
 
-Consult Lines 136-ff for Attribute/Key possibilities.
+Consult Lines 140-ff for Attribute/Key possibilities.
 
+As long as TPV'time', GST'time', ATT'time', and POLL'time' are the same,
+or TPV'device', GST'device', ATT'device, PPS'device', and TOFF'device  is
+the same as DEVICES(device)'path' throughout "she'll be right"
 """
 from __future__ import print_function
 
@@ -29,9 +32,9 @@ import socket
 import sys
 
 __author__ = 'Moe'
-__copyright__ = 'Copyright 2015-2017  Moe'
+__copyright__ = 'Copyright 2015-2016  Moe'
 __license__ = 'MIT'
-__version__ = '0.35'
+__version__ = '0.33.2'
 
 HOST = '127.0.0.1'  # gpsd
 GPSD_PORT = 2947  # defaults
@@ -58,8 +61,8 @@ class GPSDSocket(object):
                 self.streamSock.connect(host_port)
                 self.streamSock.setblocking(False)
             except (OSError, IOError) as error:
-                sys.stderr.write(f'\r\nGPSDSocket.connect exception is--> {error}')
-                sys.stderr.write(f'\r\nAGPS3 connection to gpsd at \'{host}\' on port \'{port}\' failed\r\n')
+                sys.stderr.write('\r\nGPSDSocket.connect exception is--> {}'.format(error))
+                sys.stderr.write('\r\nAGPS3 connection to a gpsd at \'{0}\' on port \'{1}\' failed\r\n'.format(host, port))
 
     def watch(self, enable=True, gpsd_protocol=PROTOCOL, devicepath=None):
         """watch gpsd in various gpsd_protocols or devices.
@@ -94,7 +97,7 @@ class GPSDSocket(object):
         except TypeError:
             self.streamSock.send(commands)  # 2.7 chokes on 'bytes' and 'encoding='
         except (OSError, IOError) as error:  # HEY MOE, LEAVE THIS ALONE FOR NOW!
-            sys.stderr.write(f'\nAGPS3 send command fail with {error}\n')  # [Errno 107] Transport endpoint is not connected
+            sys.stderr.write('\nAGPS3 send command fail with {}\n'.format(error))  # [Errno 107] Transport endpoint is not connected
 
     def __iter__(self):
         """banana"""  # <--- for scale
@@ -137,10 +140,8 @@ class DataStream(object):
         'VERSION': {'release', 'proto_major', 'proto_minor', 'remote', 'rev'},
         'TPV': {'alt', 'climb', 'device', 'epc', 'epd', 'eps', 'ept', 'epv', 'epx', 'epy', 'lat', 'lon', 'mode', 'speed', 'tag', 'time', 'track'},
         'SKY': {'satellites', 'gdop', 'hdop', 'pdop', 'tdop', 'vdop', 'xdop', 'ydop'},
-        # Subset of SKY: \\\'satellites': {'PRN', 'ss', 'el', 'az', 'used'}///  # is always present.
+        # Subset of SKY: 'satellites': {'PRN', 'ss', 'el', 'az', 'used'}  # is always present.
         'GST': {'alt', 'device', 'lat', 'lon', 'major', 'minor', 'orient', 'rms', 'time'},
-        # In 'GST', 'lat' and 'lon' present a name collision and are amended to 'sdlat', 'sdlon',
-        # because they are standard deviations of of 'TPV' 'lat' and 'lon'
         'ATT': {'acc_len', 'acc_x', 'acc_y', 'acc_z', 'depth', 'device', 'dip', 'gyro_x', 'gyro_y', 'heading', 'mag_len', 'mag_st', 'mag_x',
                 'mag_y', 'mag_z', 'pitch', 'pitch_st', 'roll', 'roll_st', 'temperature', 'time', 'yaw', 'yaw_st'},
         # 'POLL': {'active', 'tpv', 'sky', 'time'},
@@ -154,11 +155,8 @@ class DataStream(object):
     def __init__(self):
         """Potential data packages from gpsd for a generator of class attributes"""
         for laundry_list in self.packages.values():
-            for item in laundry_list:
-                # Fudge around the namespace collision with GST data package lat/lon being standard deviations
-                if laundry_list == 'GST' and ( item == 'lat' or item == 'lon' ):
-                    setattr(self, 'sd' + item, 'n/a')
-                setattr(self, item, 'n/a')
+            for thingy in laundry_list:
+                setattr(self, thingy, 'n/a')
 
     def unpack(self, gpsd_socket_response):
         """Sets new socket data as DataStream attributes in those initialised dictionaries
@@ -175,9 +173,6 @@ class DataStream(object):
             fresh_data = json.loads(gpsd_socket_response)  # 'class' is popped for iterator lead
             class_name = fresh_data.pop('class')
             for key in self.packages[class_name]:
-                # Fudge around the namespace collision with GST data package lat/lon being standard deviations
-                if class_name == 'GST' and key == 'lat' or 'lon':
-                    setattr(self, 'sd' + key, fresh_data.get(key, 'n/a'))
                 setattr(self, key, fresh_data.get(key, 'n/a'))  # Updates and restores 'n/a' if attribute is absent in the data
 
         except AttributeError:  # 'str' object has no attribute 'keys'
